@@ -116,8 +116,13 @@ r2_test = r2_score(preds_test_df['Demand'], preds_test_df['y_pred'])
 mae_test = mean_absolute_error(preds_test_df['Demand'], preds_test_df['y_pred'])
 rmse_test = np.sqrt(mean_squared_error(preds_test_df['Demand'], preds_test_df['y_pred']))
 
+
 print(f"[Train Dataset] R²: {r2_train:.4f}, MAE: {mae_train:.4f}, RMSE: {rmse_train:.4f}")
 print(f"[Test Dataset] R²: {r2_test:.4f}, MAE: {mae_test:.4f}, RMSE: {rmse_test:.4f}")
+actual_std_test = preds_test_df['Demand'].std()
+print(f"Std Dev of Actual Demand (Test Set): {actual_std_test:.4f}")
+residual_std_test = (preds_test_df['Demand'] - preds_test_df['y_pred']).std()
+print(f"Std Dev of Residuals (Test Set): {residual_std_test:.4f}")
 
 # Residual Plot , test dataset
 plt.figure(figsize=(8,6))
@@ -128,9 +133,7 @@ plt.ylabel("Residuals (Actual - Predicted)")
 plt.title("Residual Plot")
 plt.show()
 
-# === Time Series Plot with Prediction Interval ===
-# === Actual vs Predicted Demand over time
-# === Shaded area = 95% prediction interval
+# Time Series Plot with Prediction Interval. Actual vs Predicted Demand over time. Shaded area = 95% prediction interval
 preds_test_df = preds_test_df.sort_values('Date')
 plt.figure(figsize=(12,6))
 plt.plot(preds_test_df['Date'], preds_test_df['Demand'], label='Actual Demand', alpha=0.7)
