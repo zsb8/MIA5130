@@ -2,7 +2,7 @@
 
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import TimeSeriesSplit
+from sklearn.model_selection import TimeSeriesSplit, train_test_split
 from sklearn.linear_model import RidgeCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
@@ -52,7 +52,7 @@ df.dropna(inplace=True)
 df['Demand_scaled'] = df.groupby('Store_Product_ID')['Demand'].transform(
     lambda x: (x - x.mean()) / x.std()
 )
-# === Sets target (y) and predictors (X) for training.
+# Sets target (y) and predictors (X) for training.
 y = df['Demand_scaled']
 
 feature_cols = [
@@ -70,56 +70,58 @@ feature_cols += [col for col in df.columns if
                  col.startswith('Category_')]
 X = df[feature_cols]
 
-# TimeSeriesSplit
-tscv = TimeSeriesSplit(n_splits=5)
+# Split Train and Test Dataset
+X_train, X_test, y_train, y_test, df_train, df_test = train_test_split(
+    X, y, df, test_size=0.2, shuffle=False
+)
 
 """ 
 RidgeCV Pipeline
 Combines polynomial feature expansion, standard scaling, and RidgeCV in a clean workflow.
 PolynomialFeatures lets the model learn interactions/quadratic effects. 
-degree=2: R2=0.6803, MAE=20.2451, RESE: 26.5783
+degree=2: R2=0.6760, MAE=20.9665, RESE: 27.5440
 degree=3: R2=0.7397, MAE=18.0209, RESE: 23.9830
 """
 pipeline = Pipeline([
     ('poly', PolynomialFeatures(degree=2, include_bias=False)),
     ('scaler', StandardScaler()),
-    ('ridge', RidgeCV(alphas=[0.001, 0.01, 0.1, 1.0, 10.0], scoring='r2', cv=tscv))
+    ('ridge', RidgeCV(alphas=[0.001, 0.01, 0.1, 1.0, 10.0], scoring='r2', cv=3))
 ])
 # Trains the full pipeline with cross-validated Ridge regression.
-pipeline.fit(X, y)
+pipeline.fit(X_train, y_train)
 # Gets predictions, then reverts them from scaled units back to actual demand values.
-y_pred_scaled = pipeline.predict(X)
-preds_df = df[['Store_Product_ID', 'Demand', 'Date']].copy()
-preds_df['y_pred_scaled'] = y_pred_scaled
+y_pred_train_scaled = pipeline.predict(X_train)
+y_pred_test_scaled = pipeline.predict(X_test)
 
-means = df.groupby('Store_Product_ID')['Demand'].transform('mean')
-stdevs = df.groupby('Store_Product_ID')['Demand'].transform('std')
+# Restore to original demand
+means_train = df_train.groupby('Store_Product_ID')['Demand'].transform('mean')
+stdevs_train = df_train.groupby('Store_Product_ID')['Demand'].transform('std')
+means_test = df_test.groupby('Store_Product_ID')['Demand'].transform('mean')
+stdevs_test = df_test.groupby('Store_Product_ID')['Demand'].transform('std')
 
-preds_df['y_pred'] = preds_df['y_pred_scaled'] * stdevs + means
+preds_train_df = df_train[['Store_Product_ID', 'Demand', 'Date']].copy()
+preds_train_df['y_pred_scaled'] = y_pred_train_scaled
+preds_train_df['y_pred'] = preds_train_df['y_pred_scaled'] * stdevs_train + means_train
 
-# Add 95% prediction interval ===
-# Uses standard deviation of residuals to create a confidence band (±1.96σ covers ~95%).
-residual_std = (preds_df['Demand'] - preds_df['y_pred']).std()
-preds_df['y_upper'] = preds_df['y_pred'] + 1.96 * residual_std
-preds_df['y_lower'] = preds_df['y_pred'] - 1.96 * residual_std
+preds_test_df = df_test[['Store_Product_ID', 'Demand', 'Date']].copy()
+preds_test_df['y_pred_scaled'] = y_pred_test_scaled
+preds_test_df['y_pred'] = preds_test_df['y_pred_scaled'] * stdevs_test + means_test
 
-# Evaluation ===
-r2 = r2_score(preds_df['Demand'], preds_df['y_pred'])
-mae = mean_absolute_error(preds_df['Demand'], preds_df['y_pred'])
-rmse = np.sqrt(mean_squared_error(preds_df['Demand'], preds_df['y_pred']))
-actual_std = preds_df['Demand'].std()
+# Evaluation
+r2_train = r2_score(preds_train_df['Demand'], preds_train_df['y_pred'])
+mae_train = mean_absolute_error(preds_train_df['Demand'], preds_train_df['y_pred'])
+rmse_train = np.sqrt(mean_squared_error(preds_train_df['Demand'], preds_train_df['y_pred']))
 
-print(f"R² Score ( % variance explained ): {r2:.4f}")
-print(f"MAE ( average absolute error ): {mae:.4f}")
-print(f"RMSE ( error magnitude (in same units as demand) ): {rmse:.4f}")
-print(f"Std Dev of Actual Demand: {actual_std:.4f}")
-print(f"Std Dev of Residuals: {residual_std:.4f}")
+r2_test = r2_score(preds_test_df['Demand'], preds_test_df['y_pred'])
+mae_test = mean_absolute_error(preds_test_df['Demand'], preds_test_df['y_pred'])
+rmse_test = np.sqrt(mean_squared_error(preds_test_df['Demand'], preds_test_df['y_pred']))
 
+print(f"[Train Dataset] R²: {r2_train:.4f}, MAE: {mae_train:.4f}, RMSE: {rmse_train:.4f}")
+print(f"[Test Dataset] R²: {r2_test:.4f}, MAE: {mae_test:.4f}, RMSE: {rmse_test:.4f}")
 
-# === Residual Plot ===
-# === Visual check for bias: residuals should be centered around 0 and evenly spread.
+# Residual Plot , test dataset
 plt.figure(figsize=(8,6))
-plt.scatter(preds_df['y_pred'], preds_df['Demand'] - preds_df['y_pred'], alpha=0.3)
+plt.scatter(preds_test_df['y_pred'], preds_test_df['Demand'] - preds_test_df['y_pred'], alpha=0.3)
 plt.axhline(0, color='red', linestyle='--')
 plt.xlabel("Predicted Demand")
 plt.ylabel("Residuals (Actual - Predicted)")
@@ -129,13 +131,14 @@ plt.show()
 # === Time Series Plot with Prediction Interval ===
 # === Actual vs Predicted Demand over time
 # === Shaded area = 95% prediction interval
-preds_df = preds_df.sort_values('Date')
-
+preds_test_df = preds_test_df.sort_values('Date')
 plt.figure(figsize=(12,6))
-plt.plot(preds_df['Date'], preds_df['Demand'], label='Actual Demand', alpha=0.7)
-plt.plot(preds_df['Date'], preds_df['y_pred'], label='Predicted Demand', linestyle='--', alpha=0.7)
-plt.fill_between(preds_df['Date'], preds_df['y_lower'], preds_df['y_upper'], color='gray', alpha=0.2, label='95% Interval')
-plt.title("Actual vs Predicted Demand with 95% Prediction Interval")
+plt.plot(preds_test_df['Date'], preds_test_df['Demand'], label='Actual Demand', alpha=0.7)
+plt.plot(preds_test_df['Date'], preds_test_df['y_pred'], label='Predicted Demand', linestyle='--', alpha=0.7)
+plt.fill_between(preds_test_df['Date'], preds_test_df['y_pred'] - 1.96 * (preds_test_df['Demand'] - preds_test_df['y_pred']).std(),
+                 preds_test_df['y_pred'] + 1.96 * (preds_test_df['Demand'] - preds_test_df['y_pred']).std(),
+                 color='gray', alpha=0.2, label='95% Interval')
+plt.title("Actual vs Predicted Demand with 95% Prediction Interval (Test Set)")
 plt.xlabel("Date")
 plt.ylabel("Demand")
 plt.legend()
@@ -144,32 +147,3 @@ plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
 plt.xticks(rotation=45)
 plt.tight_layout()
 plt.show()
-
-# === Forecast Error Distribution ===
-forecast_errors = preds_df['Demand'] - preds_df['y_pred']
-plt.figure(figsize=(8,6))
-plt.hist(forecast_errors, bins=30, alpha=0.6, color='b', edgecolor='black', density=True, label='Histogram')
-sns.kdeplot(forecast_errors, color='red', linewidth=2, label='KDE')
-plt.axvline(0, color='black', linestyle='--', linewidth=1)
-plt.title("Forecast Error Distribution")
-plt.xlabel("Forecast Error (Actual - Predicted)")
-plt.ylabel("Density")
-plt.legend()
-plt.tight_layout()
-plt.show()
-
-# Analyze the relationship between forecast error and inventory levels
-# 1. Incorporating forecast errors and inventory levels
-preds_df['Forecast_Error'] = preds_df['Demand'] - preds_df['y_pred']
-preds_df = preds_df.merge(df[['Date', 'Store_Product_ID', 'Inventory Level']], on=['Date', 'Store_Product_ID'], how='left')
-# 2. plot
-plt.figure(figsize=(8,6))
-plt.scatter(preds_df['Inventory Level'], preds_df['Forecast_Error'], alpha=0.3)
-plt.axhline(0, color='red', linestyle='--')
-plt.xlabel("Inventory Level")
-plt.ylabel("Forecast Error (Actual - Predicted)")
-plt.title("Forecast Error vs Inventory Level")
-plt.tight_layout()
-plt.show()
-corr = preds_df[['Inventory Level', 'Forecast_Error']].corr().iloc[0,1]
-print(f"Pearson correlation coefficient between forecast error and inventory level: {corr:.4f}")
