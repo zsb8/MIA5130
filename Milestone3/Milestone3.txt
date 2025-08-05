@@ -1,0 +1,58 @@
+# This file contains the code for Milestone 3 of MIA 5130: Inventory Optimization.
+# Group 9
+# Authors: 
+# Zuo Xiong, 300448648
+# Songbin Zhang, 300502477
+# Leo Fonseca, 300489584
+# Jonathan Shubat, 8637442
+# University of Ottawa
+# This file is intended to be compiled and executed using an online optimization tool.
+# (https://online-optimizer.appspot.com/?model=builtin:default.mod)
+
+
+# Declare integer variables with demand caps
+var x1 integer >= 0, <= 32;
+var x2 integer >= 0, <= 96;
+var x3 integer >= 0, <= 80;
+var x4 integer >= 0, <= 70;
+var x5 integer >= 0, <= 67;
+var x6 integer >= 0, <= 53;
+var x7 integer >= 0, <= 76;
+var x8 integer >= 0, <= 101;
+var x9 integer >= 0, <= 80;
+var x10 integer >= 0, <= 70;
+
+# Fixed tolerance y
+# Adjust y value from 0.1 to 0.5 to evaluate different pricing bias strategies
+var y = 0.5;
+
+maximize obj:
+  11.82*x1 + 41.18*x2 + 75.13*x3 + 21.59*x4 + 18.13*x5
++ 29.45*x6 + 12.74*x7 + 106.75*x8 + 45.26*x9 + 31.41*x10;
+
+# Total inventory must be exactly 100
+s.t. capacity:
+  x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10 = 100;
+
+# Total demand = 725
+s.t. prop_lower1: x1  >=  (1 - y) * (32 / 725) * 100;
+s.t. prop_lower2: x2  >=  (1 - y) * (96 / 725) * 100;
+s.t. prop_lower3: x3  >=  (1 - y) * (80 / 725) * 100;
+s.t. prop_lower4: x4  >=  (1 - y) * (70 / 725) * 100;
+s.t. prop_lower5: x5  >=  (1 - y) * (67 / 725) * 100;
+s.t. prop_lower6: x6  >=  (1 - y) * (53 / 725) * 100;
+s.t. prop_lower7: x7  >=  (1 - y) * (76 / 725) * 100;
+s.t. prop_lower8: x8  >=  (1 - y) * (101 / 725) * 100;
+s.t. prop_lower9: x9  >=  (1 - y) * (80 / 725) * 100;
+s.t. prop_lower10:x10 >=  (1 - y) * (70 / 725) * 100;
+
+s.t. prop_upper1: x1  <=  (1 + y) * (32 / 725) * 100;
+s.t. prop_upper2: x2  <=  (1 + y) * (96 / 725) * 100;
+s.t. prop_upper3: x3  <=  (1 + y) * (80 / 725) * 100;
+s.t. prop_upper4: x4  <=  (1 + y) * (70 / 725) * 100;
+s.t. prop_upper5: x5  <=  (1 + y) * (67 / 725) * 100;
+s.t. prop_upper6: x6  <=  (1 + y) * (53 / 725) * 100;
+s.t. prop_upper7: x7  <=  (1 + y) * (76 / 725) * 100;
+s.t. prop_upper8: x8  <=  (1 + y) * (101 / 725) * 100;
+s.t. prop_upper9: x9  <=  (1 + y) * (80 / 725) * 100;
+s.t. prop_upper10:x10 <=  (1 + y) * (70 / 725) * 100;
